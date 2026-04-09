@@ -31,6 +31,7 @@ import { accessRoutes } from "./routes/access.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { adapterRoutes } from "./routes/adapters.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
+import { isOrchestratorBridgeEnabled, s4aOrchestratorRoutes } from "./routes/s4a-orchestrator.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
@@ -167,6 +168,13 @@ export async function createApp(
   api.use(dashboardRoutes(db));
   api.use(sidebarBadgeRoutes(db));
   api.use(instanceSettingsRoutes(db));
+
+  // S4A Slice Orchestrator bridge — opt-in via S4A_ORCHESTRATOR_BRIDGE=1
+  if (isOrchestratorBridgeEnabled()) {
+    api.use("/s4a-orchestrator", s4aOrchestratorRoutes());
+    logger.info("S4A Orchestrator bridge enabled on /api/s4a-orchestrator");
+  }
+
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = createPluginWorkerManager();
   const pluginRegistry = pluginRegistryService(db);
