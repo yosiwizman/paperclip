@@ -446,19 +446,41 @@ A read-only inspector page inside Paperclip for viewing slice orchestrator state
 **URL:** `http://localhost:3100/instance/settings/s4a-slices`
 
 **Features:**
-- Manual workflowId input
+- Manual workflowId input + Inspect button
 - Displays: state, builderAgentId, buildFailCount (via `getStatus`)
 - Displays: full transition history table (via `getHistory`)
 - Color-coded state badges
-- Read-only — no mutation controls
+- Mutation controls (Phase 21):
+  - **Create Slice** — form with description + optional sliceId, auto-loads result
+  - **Assign Builder** — OpenCode or Claude Code (visible when state = SCOPED)
+  - **Retry** — visible when state = BLOCKED
+  - **Rollback** — visible for all supported non-terminal states
+  - **Approve** — visible when state = AWAITING_APPROVAL
+  - **Deploy** — visible when state = APPROVED
+  - **Terminal states** — shows "no actions available"
+- Auto-refresh after mutations
+- Success/error feedback messages
+
+**State-gating rules:**
+| State | Available actions |
+|-------|-----------------|
+| SCOPED | Assign OpenCode, Assign Claude Code, Rollback |
+| BUILDING | Rollback |
+| REVIEWING | Rollback |
+| VERIFYING | Rollback |
+| AWAITING_APPROVAL | Approve, Rollback |
+| APPROVED | Deploy, Rollback |
+| BLOCKED | Retry, Rollback |
+| DEPLOYED | (terminal) |
+| ROLLED_BACK | (terminal) |
 
 **Files:**
-- `ui/src/pages/SliceInspector.tsx` — the inspector page component
-- `ui/src/api/s4a.ts` — API module wrapping bridge POST calls
+- `ui/src/pages/SliceInspector.tsx` — inspector page with mutation controls
+- `ui/src/api/s4a.ts` — API module: queries + mutations (createSlice, assignBuilder, retry, rollback, approve, deploy)
 - `ui/src/App.tsx` — route mount at `instance/settings/s4a-slices`
 
 **No new backend code** — uses existing `/api/s4a-orchestrator` POST route.
-**No new env gate** — available whenever Paperclip runs (bridge must be enabled for data).
+**No new env gate** — available whenever Paperclip runs (bridge must be enabled for data/actions).
 
 ## Branch / fork safety
 
