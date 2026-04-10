@@ -192,6 +192,41 @@ bash server/scripts/s4a-bridge-smoke.sh review-reject     # reject → stays REV
 bash server/scripts/s4a-bridge-smoke.sh review             # both
 ```
 
+## CEO approval (Phase 13)
+
+The CEO grants final approval through the existing generic bridge. **No new env gate is needed** — `approve` is already a supported command when `S4A_ORCHESTRATOR_BRIDGE=1`.
+
+**Canonical `approve` envelope:**
+```json
+{
+  "version": "1",
+  "requestId": "req-ceo-001",
+  "command": "approve",
+  "payload": {
+    "workflowId": "slice-workflow-my-feature"
+  },
+  "caller": "ceo",
+  "timestamp": "2026-04-09T12:00:00Z"
+}
+```
+
+**State transition:**
+| From state | To state | Mechanism |
+|-----------|----------|-----------|
+| `AWAITING_APPROVAL` | `APPROVED` | Cedar `approval_required` policy checks `approvalGranted=true` |
+
+**Convenience helper:**
+```bash
+bash server/scripts/s4a-approve.sh <workflowId> [caller]
+```
+
+Default caller: `ceo`. The helper POSTs the canonical envelope through the bridge.
+
+**Smoke proof:**
+```bash
+bash server/scripts/s4a-bridge-smoke.sh approve   # AWAITING_APPROVAL → APPROVED
+```
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.

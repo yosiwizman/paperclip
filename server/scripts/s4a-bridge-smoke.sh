@@ -294,6 +294,35 @@ test_review_reject() {
   check_json "reportReview(reject)" "approved" "false" "$(echo "$r1" | jq -r '.data.approved')"
 }
 
+test_approve() {
+  echo "=== CEO APPROVAL PATH ==="
+  local slice_id="smoke-approve-$(date +%s)"
+  local wf_id="slice-workflow-$slice_id"
+
+  # Create + assign + pass tests + approve review → reach AWAITING_APPROVAL
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Approval test\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportTests "{\"workflowId\":\"$wf_id\",\"pass\":true,\"commit\":true}" opencode)" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportReview "{\"workflowId\":\"$wf_id\",\"approved\":true}" codex)" > /dev/null
+
+  # Verify in AWAITING_APPROVAL
+  local pre
+  pre=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope getState "{\"workflowId\":\"$wf_id\"}")")
+  check_json "pre-approve state" "state" "AWAITING_APPROVAL" "$(echo "$pre" | jq -r '.data.state')"
+
+  # CEO approval
+  local r1
+  r1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope approve "{\"workflowId\":\"$wf_id\"}" ceo)")
+  check_json "approve" "ok" "true" "$(echo "$r1" | jq -r '.ok')"
+  check_json "approve" "state" "APPROVED" "$(echo "$r1" | jq -r '.data.state')"
+}
+
 # --- Main ---
 MODE="${1:-both}"
 
@@ -310,7 +339,8 @@ case "$MODE" in
   review-approve)   test_review_approve ;;
   review-reject)    test_review_reject ;;
   review)           test_review_approve; echo; test_review_reject ;;
-  all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject ;;
+  approve)          test_approve ;;
+  all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject; echo; test_approve ;;
   *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|report|review-approve|review-reject|review|all]"; exit 1 ;;
 esac
 
