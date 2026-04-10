@@ -119,14 +119,77 @@ test_enabled() {
   else fail "Evidence directory not found: $evidence_dir"; fi
 }
 
+test_autoassign_disabled() {
+  echo "=== AUTO-ASSIGN DISABLED (env gate off, request opt-in present) ==="
+  local slice_id="smoke-aa-off-$(date +%s)"
+
+  local r1
+  r1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Auto-assign disabled test\",\"autoAssign\":true}")")
+  check_json "createSlice (aa disabled)" "ok" "true" "$(echo "$r1" | jq -r '.ok')"
+  check_json "createSlice (aa disabled)" "state" "SCOPED" "$(echo "$r1" | jq -r '.data.state')"
+
+  # autoAssign field should NOT be present when env gate is off
+  local aa_present
+  aa_present=$(echo "$r1" | jq -r '.data.autoAssign // "absent"')
+  if [ "$aa_present" = "absent" ]; then
+    ok "No autoAssign in response (env gate off)"
+  else
+    fail "autoAssign present unexpectedly: $aa_present"
+  fi
+}
+
+test_autoassign_enabled() {
+  echo "=== AUTO-ASSIGN ENABLED (env gate on, request opt-in present) ==="
+  local slice_id="smoke-aa-on-$(date +%s)"
+
+  local r1
+  r1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Auto-assign enabled test\",\"autoAssign\":true}")")
+  check_json "createSlice (aa enabled)" "ok" "true" "$(echo "$r1" | jq -r '.ok')"
+
+  # autoAssign field should be present with builder info
+  local aa_ok aa_agent aa_state
+  aa_ok=$(echo "$r1" | jq -r '.data.autoAssign.ok')
+  aa_agent=$(echo "$r1" | jq -r '.data.autoAssign.agentId')
+  aa_state=$(echo "$r1" | jq -r '.data.autoAssign.state')
+  check_json "autoAssign" "ok" "true" "$aa_ok"
+  check_json "autoAssign" "agentId" "opencode" "$aa_agent"
+  check_json "autoAssign" "state" "BUILDING" "$aa_state"
+}
+
+test_autoassign_no_optin() {
+  echo "=== AUTO-ASSIGN NO OPT-IN (env gate on, request opt-in absent) ==="
+  local slice_id="smoke-aa-noop-$(date +%s)"
+
+  local r1
+  r1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"No opt-in test\"}")")
+  check_json "createSlice (no opt-in)" "ok" "true" "$(echo "$r1" | jq -r '.ok')"
+  check_json "createSlice (no opt-in)" "state" "SCOPED" "$(echo "$r1" | jq -r '.data.state')"
+
+  # autoAssign field should NOT be present
+  local aa_present
+  aa_present=$(echo "$r1" | jq -r '.data.autoAssign // "absent"')
+  if [ "$aa_present" = "absent" ]; then
+    ok "No autoAssign in response (no opt-in)"
+  else
+    fail "autoAssign present unexpectedly: $aa_present"
+  fi
+}
+
 # --- Main ---
 MODE="${1:-both}"
 
 case "$MODE" in
-  disabled) test_disabled ;;
-  enabled)  test_enabled ;;
-  both)     test_disabled; echo; test_enabled ;;
-  *)        echo "Usage: $0 [disabled|enabled|both]"; exit 1 ;;
+  disabled)       test_disabled ;;
+  enabled)        test_enabled ;;
+  both)           test_disabled; echo; test_enabled ;;
+  autoassign-off) test_autoassign_disabled ;;
+  autoassign-on)  test_autoassign_enabled ;;
+  autoassign-noop) test_autoassign_no_optin ;;
+  all)            test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin ;;
+  *)              echo "Usage: $0 [disabled|enabled|both|autoassign-off|autoassign-on|autoassign-noop|all]"; exit 1 ;;
 esac
 
 echo ""

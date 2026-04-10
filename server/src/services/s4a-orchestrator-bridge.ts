@@ -8,6 +8,8 @@
  *   S4A_ORCHESTRATOR_BRIDGE   — "1" to enable, anything else to disable (default: disabled)
  *   S4A_WRAPPER_PATH          — path to orchestrator wrapper.js (default: ~/projects/s4a-slice-orchestrator/dist/wrapper.js)
  *   S4A_BRIDGE_TIMEOUT_MS     — subprocess timeout in ms (default: 45000)
+ *   S4A_BRIDGE_AUTO_ASSIGN    — "1" to enable auto-assign after createSlice (default: disabled)
+ *   S4A_DEFAULT_BUILDER       — builder agentId for auto-assign (default: "opencode")
  */
 
 import { execSync } from "node:child_process";
@@ -29,6 +31,8 @@ export interface OrchestratorResponse {
 /** Bridge configuration, resolved once from env. */
 export interface BridgeConfig {
   enabled: boolean;
+  autoAssignEnabled: boolean;
+  defaultBuilder: string;
   wrapperPath: string;
   timeoutMs: number;
 }
@@ -44,6 +48,8 @@ export function resolveBridgeConfig(): BridgeConfig {
 
   return {
     enabled: process.env.S4A_ORCHESTRATOR_BRIDGE === "1",
+    autoAssignEnabled: process.env.S4A_BRIDGE_AUTO_ASSIGN === "1",
+    defaultBuilder: process.env.S4A_DEFAULT_BUILDER ?? "opencode",
     wrapperPath: process.env.S4A_WRAPPER_PATH ?? defaultWrapperPath,
     timeoutMs: parseInt(process.env.S4A_BRIDGE_TIMEOUT_MS ?? "", 10) || 45_000,
   };
@@ -127,4 +133,47 @@ export function executeViaWrapper(
       "INTERNAL_ERROR",
     );
   }
+}
+
+/**
+ * Auto-assign default builder after a successful createSlice.
+ *
+ * Only called when:
+ *   1. S4A_BRIDGE_AUTO_ASSIGN=1 env gate is on
+ *   2. Request payload includes autoAssign: true
+ *   3. createSlice response was ok: true with a workflowId
+ *
+ * Issues an assignBuilder envelope using the configured default builder.
+ */
+export function autoAssignAfterCreate(
+  createResponse: OrchestratorResponse,
+  originalEnvelope: Record<string, unknown>,
+  config: BridgeConfig,
+): OrchestratorResponse | null {
+  if (!config.autoAssignEnabled) {
+    return null;
+  }
+
+  const payload = originalEnvelope.payload as Record<string, unknown> | undefined;
+  if (!payload?.autoAssign) {
+    return null;
+  }
+
+  if (!createResponse.ok || !createResponse.data?.workflowId) {
+    return null;
+  }
+
+  const assignEnvelope = {
+    version: "1",
+    requestId: `${originalEnvelope.requestId}-auto-assign`,
+    command: "assignBuilder",
+    payload: {
+      workflowId: createResponse.data.workflowId,
+      agentId: config.defaultBuilder,
+    },
+    caller: originalEnvelope.caller ?? "paperclip",
+    timestamp: new Date().toISOString(),
+  };
+
+  return executeViaWrapper(assignEnvelope, config);
 }

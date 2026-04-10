@@ -12,6 +12,7 @@ import {
   type BridgeConfig,
   resolveBridgeConfig,
   executeViaWrapper,
+  autoAssignAfterCreate,
   errorEnvelope,
 } from "../services/s4a-orchestrator-bridge.js";
 
@@ -46,6 +47,29 @@ export function s4aOrchestratorRoutes() {
     }
 
     const response = executeViaWrapper(envelope, config);
+
+    // Auto-assign after successful createSlice (if env + request opt-in)
+    if (envelope.command === "createSlice" && response.ok) {
+      const assignResult = autoAssignAfterCreate(response, envelope, config);
+      if (assignResult) {
+        // Merge auto-assign info into the create response
+        const enriched = {
+          ...response,
+          data: {
+            ...response.data,
+            autoAssign: {
+              ok: assignResult.ok,
+              agentId: config.defaultBuilder,
+              state: assignResult.data?.state ?? null,
+              error: assignResult.error ?? null,
+            },
+          },
+        };
+        res.status(200).json(enriched);
+        return;
+      }
+    }
+
     res.status(response.ok ? 200 : 422).json(response);
   });
 

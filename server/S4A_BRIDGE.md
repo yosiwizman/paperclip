@@ -36,7 +36,9 @@ Opt-in integration between Paperclip and the S4A slice orchestrator.
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `S4A_ORCHESTRATOR_BRIDGE` | unset | `1` to enable |
+| `S4A_ORCHESTRATOR_BRIDGE` | unset | `1` to enable bridge |
+| `S4A_BRIDGE_AUTO_ASSIGN` | unset | `1` to enable auto-assign after createSlice |
+| `S4A_DEFAULT_BUILDER` | `opencode` | Builder agentId for auto-assign |
 | `S4A_WRAPPER_PATH` | `~/projects/s4a-slice-orchestrator/dist/wrapper.js` | Orchestrator wrapper path |
 | `S4A_BRIDGE_TIMEOUT_MS` | `45000` | Subprocess timeout (ms) |
 
@@ -51,9 +53,65 @@ bash server/scripts/s4a-bridge-smoke.sh enabled
 
 # Both:
 bash server/scripts/s4a-bridge-smoke.sh both
+
+# Auto-assign tests (requires S4A_BRIDGE_AUTO_ASSIGN=1 for enabled test):
+bash server/scripts/s4a-bridge-smoke.sh autoassign-off    # env gate off, opt-in present
+bash server/scripts/s4a-bridge-smoke.sh autoassign-on     # env gate on, opt-in present
+bash server/scripts/s4a-bridge-smoke.sh autoassign-noop   # env gate on, opt-in absent
+
+# All tests:
+bash server/scripts/s4a-bridge-smoke.sh all
 ```
 
 Prerequisites: Temporal dev server + orchestrator worker running. See orchestrator repo `docs/PAPERCLIP_BRIDGE.md`.
+
+## Auto-assign (Phase 10)
+
+When both the env gate AND request opt-in are active, `createSlice` automatically calls `assignBuilder` with the default builder.
+
+**Gating model (three gates, all required):**
+1. `S4A_ORCHESTRATOR_BRIDGE=1` — bridge must be enabled
+2. `S4A_BRIDGE_AUTO_ASSIGN=1` — auto-assign env gate must be on
+3. `payload.autoAssign: true` — request must explicitly opt in
+
+If any gate is off, `createSlice` behaves exactly as before.
+
+**Default builder:** `opencode` (per SSOT AGENT_ROLE_MATRIX.md and DELIVERY_PIPELINE.md)
+
+**Request example (with auto-assign):**
+```json
+{
+  "version": "1",
+  "requestId": "req-001",
+  "command": "createSlice",
+  "payload": {
+    "sliceId": "my-feature",
+    "description": "Build login page",
+    "autoAssign": true
+  },
+  "caller": "paperclip",
+  "timestamp": "2026-04-09T12:00:00Z"
+}
+```
+
+**Response (when auto-assign fires):**
+```json
+{
+  "ok": true,
+  "data": {
+    "workflowId": "slice-workflow-my-feature",
+    "sliceId": "my-feature",
+    "state": "SCOPED",
+    "autoAssign": {
+      "ok": true,
+      "agentId": "opencode",
+      "state": "BUILDING"
+    }
+  }
+}
+```
+
+**Scope limit:** This phase only supports default-builder auto-assign. No escalation logic, no Claude Code routing, no heuristics.
 
 ## Branch / fork safety
 
