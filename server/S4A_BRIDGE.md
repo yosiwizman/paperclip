@@ -439,6 +439,27 @@ Default caller: `ceo`.
 bash server/scripts/s4a-bridge-smoke.sh rollback   # BUILDING → rollback → ROLLED_BACK + evidence + terminal check
 ```
 
+## Slice Inspector UI (Phase 20)
+
+A read-only inspector page inside Paperclip for viewing slice orchestrator state.
+
+**URL:** `http://localhost:3100/instance/settings/s4a-slices`
+
+**Features:**
+- Manual workflowId input
+- Displays: state, builderAgentId, buildFailCount (via `getStatus`)
+- Displays: full transition history table (via `getHistory`)
+- Color-coded state badges
+- Read-only — no mutation controls
+
+**Files:**
+- `ui/src/pages/SliceInspector.tsx` — the inspector page component
+- `ui/src/api/s4a.ts` — API module wrapping bridge POST calls
+- `ui/src/App.tsx` — route mount at `instance/settings/s4a-slices`
+
+**No new backend code** — uses existing `/api/s4a-orchestrator` POST route.
+**No new env gate** — available whenever Paperclip runs (bridge must be enabled for data).
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.
