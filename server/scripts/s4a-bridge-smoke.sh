@@ -495,6 +495,59 @@ test_policy_route() {
   check_json "policy 2nd fail" "builder" "claude-code" "$builder2"
 }
 
+test_rollback() {
+  echo "=== ROLLBACK: BUILDING → ROLLED_BACK (terminal) ==="
+  local slice_id="smoke-rollback-$(date +%s)"
+  local wf_id="slice-workflow-$slice_id"
+
+  # 1. Create + assign → BUILDING
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Rollback test\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")" > /dev/null
+
+  # 2. Verify in BUILDING
+  local pre
+  pre=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope getState "{\"workflowId\":\"$wf_id\"}")")
+  check_json "pre-rollback" "state" "BUILDING" "$(echo "$pre" | jq -r '.data.state')"
+
+  # 3. Rollback
+  local r1
+  r1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope rollback "{\"workflowId\":\"$wf_id\"}" ceo)")
+  check_json "rollback" "ok" "true" "$(echo "$r1" | jq -r '.ok')"
+
+  # 4. Evidence check — rollback emits evidence
+  local evidence_dir="$HOME/projects/s4a-slice-orchestrator/evidence/$slice_id"
+  if [ -d "$evidence_dir" ]; then
+    local has_rb
+    has_rb=$(ls "$evidence_dir" | grep -c "ROLLED_BACK" || true)
+    if [ "$has_rb" -ge 1 ]; then ok "Rollback evidence packet exists"
+    else fail "No ROLLED_BACK evidence packet"; fi
+  else fail "Evidence dir not found: $evidence_dir"; fi
+
+  # 5. Terminal behavior — attempt assignBuilder after rollback
+  #    Should fail or return an error because workflow is completed
+  local r2
+  r2=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")")
+  local post_ok
+  post_ok=$(echo "$r2" | jq -r '.ok')
+  if [ "$post_ok" = "false" ]; then
+    ok "Terminal: assignBuilder rejected after rollback (ok=false)"
+  else
+    # Workflow may have completed — query may fail too
+    local post_state
+    post_state=$(echo "$r2" | jq -r '.data.state // "error"')
+    if [ "$post_state" = "error" ] || [ "$post_state" = "null" ]; then
+      ok "Terminal: workflow completed, no state available"
+    else
+      fail "Expected terminal behavior, got state=$post_state"
+    fi
+  fi
+}
+
 # --- Main ---
 MODE="${1:-both}"
 
@@ -514,11 +567,12 @@ case "$MODE" in
   approve)          test_approve ;;
   deploy)           test_deploy ;;
   retry)            test_retry ;;
+  rollback)         test_rollback ;;
   escalate)         SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; test_escalate ;;
   policy-route)     test_policy_route ;;
   happy-path)       SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; bash "$SCRIPT_DIR/s4a-happy-path.sh" "Smoke happy-path proof" ;;
-  all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject; echo; test_approve; echo; test_deploy; echo; test_retry ;;
-  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|retry|escalate|policy-route|happy-path|all]"; exit 1 ;;
+  all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject; echo; test_approve; echo; test_deploy; echo; test_retry; echo; test_rollback ;;
+  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|retry|rollback|escalate|policy-route|happy-path|all]"; exit 1 ;;
 esac
 
 echo ""

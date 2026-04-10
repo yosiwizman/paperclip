@@ -396,6 +396,49 @@ The helper:
 bash server/scripts/s4a-bridge-smoke.sh policy-route   # 1st fail→opencode, 2nd fail→claude-code
 ```
 
+## Rollback (Phase 19)
+
+Rollback abandons a slice and moves it to the terminal `ROLLED_BACK` state. **No new env gate needed** — `rollback` is already a supported command when `S4A_ORCHESTRATOR_BRIDGE=1`. **No new orchestrator code.**
+
+**Supported source states:** SCOPED, BUILDING, REVIEWING, VERIFYING, AWAITING_APPROVAL, APPROVED, BLOCKED, RETRY_PENDING, FAILED
+
+**NOT supported from:** DRAFT (workflow hasn't started meaningful work), DEPLOYED (already terminal), ROLLED_BACK (already terminal)
+
+**Canonical `rollback` envelope:**
+```json
+{
+  "version": "1",
+  "requestId": "req-rollback-001",
+  "command": "rollback",
+  "payload": {
+    "workflowId": "slice-workflow-my-feature"
+  },
+  "caller": "ceo",
+  "timestamp": "2026-04-09T12:00:00Z"
+}
+```
+
+**State transition:**
+| From state | To state | Behavior |
+|-----------|----------|----------|
+| Any supported | `ROLLED_BACK` | Terminal — workflow completes, no further commands accepted |
+
+**Evidence:** Rollback emits an evidence packet with `toState: "ROLLED_BACK"`.
+
+**Terminal behavior:** After rollback, the workflow is complete. Further commands (assignBuilder, reportTests, etc.) will fail because the workflow has finished.
+
+**Convenience helper:**
+```bash
+bash server/scripts/s4a-rollback.sh <workflowId> [caller]
+```
+
+Default caller: `ceo`.
+
+**Smoke proof:**
+```bash
+bash server/scripts/s4a-bridge-smoke.sh rollback   # BUILDING → rollback → ROLLED_BACK + evidence + terminal check
+```
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.
