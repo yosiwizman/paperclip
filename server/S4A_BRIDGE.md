@@ -113,6 +113,46 @@ If any gate is off, `createSlice` behaves exactly as before.
 
 **Scope limit:** This phase only supports default-builder auto-assign. No escalation logic, no Claude Code routing, no heuristics.
 
+## Build-result reporting (Phase 11)
+
+Builder agents report test results through the existing generic bridge. **No new env gate is needed** — `reportTests` is already a supported command when `S4A_ORCHESTRATOR_BRIDGE=1`.
+
+**Canonical `reportTests` envelope:**
+```json
+{
+  "version": "1",
+  "requestId": "req-builder-001",
+  "command": "reportTests",
+  "payload": {
+    "workflowId": "slice-workflow-my-feature",
+    "pass": true,
+    "commit": true
+  },
+  "caller": "opencode",
+  "timestamp": "2026-04-09T12:00:00Z"
+}
+```
+
+**State transitions:**
+| Result | `pass` | Resulting state | Explanation |
+|--------|--------|----------------|-------------|
+| Pass | `true` | `REVIEWING` | Tests passed + commit exists → Cedar allows → enters review |
+| Fail | `false` | `BLOCKED` | Tests failed → Cedar denies BUILDING→REVIEWING → enters BLOCKED |
+
+**Convenience helper:**
+```bash
+bash server/scripts/s4a-report-tests.sh <workflowId> pass|fail [caller]
+```
+
+Default caller: `opencode`. The helper POSTs the canonical envelope through the bridge.
+
+**Smoke proof:**
+```bash
+bash server/scripts/s4a-bridge-smoke.sh report-pass   # pass → REVIEWING
+bash server/scripts/s4a-bridge-smoke.sh report-fail    # fail → BLOCKED
+bash server/scripts/s4a-bridge-smoke.sh report          # both
+```
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.

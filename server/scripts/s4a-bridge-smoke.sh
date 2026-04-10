@@ -178,18 +178,77 @@ test_autoassign_no_optin() {
   fi
 }
 
+test_report_pass() {
+  echo "=== REPORT TESTS — PASS PATH ==="
+  local slice_id="smoke-rpt-pass-$(date +%s)"
+  local wf_id="slice-workflow-$slice_id"
+
+  # Create + assign
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Report pass test\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")" > /dev/null
+
+  # Verify in BUILDING
+  local pre
+  pre=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope getState "{\"workflowId\":\"$wf_id\"}")")
+  check_json "pre-report state" "state" "BUILDING" "$(echo "$pre" | jq -r '.data.state')"
+
+  # Report tests PASS
+  local r1
+  r1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportTests "{\"workflowId\":\"$wf_id\",\"pass\":true,\"commit\":true}" opencode)")
+  check_json "reportTests(pass)" "ok" "true" "$(echo "$r1" | jq -r '.ok')"
+  check_json "reportTests(pass)" "state" "REVIEWING" "$(echo "$r1" | jq -r '.data.state')"
+  check_json "reportTests(pass)" "pass" "true" "$(echo "$r1" | jq -r '.data.pass')"
+}
+
+test_report_fail() {
+  echo "=== REPORT TESTS — FAIL PATH ==="
+  local slice_id="smoke-rpt-fail-$(date +%s)"
+  local wf_id="slice-workflow-$slice_id"
+
+  # Create + assign
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Report fail test\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")" > /dev/null
+
+  # Verify in BUILDING
+  local pre
+  pre=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope getState "{\"workflowId\":\"$wf_id\"}")")
+  check_json "pre-report state" "state" "BUILDING" "$(echo "$pre" | jq -r '.data.state')"
+
+  # Report tests FAIL
+  local r1
+  r1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportTests "{\"workflowId\":\"$wf_id\",\"pass\":false,\"commit\":true}" opencode)")
+  check_json "reportTests(fail)" "ok" "true" "$(echo "$r1" | jq -r '.ok')"
+
+  # After fail report, workflow transitions: BUILDING→Cedar DENY→BLOCKED
+  local post_state
+  post_state=$(echo "$r1" | jq -r '.data.state')
+  check_json "reportTests(fail)" "state" "BLOCKED" "$post_state"
+  check_json "reportTests(fail)" "pass" "false" "$(echo "$r1" | jq -r '.data.pass')"
+}
+
 # --- Main ---
 MODE="${1:-both}"
 
 case "$MODE" in
-  disabled)       test_disabled ;;
-  enabled)        test_enabled ;;
-  both)           test_disabled; echo; test_enabled ;;
-  autoassign-off) test_autoassign_disabled ;;
-  autoassign-on)  test_autoassign_enabled ;;
+  disabled)        test_disabled ;;
+  enabled)         test_enabled ;;
+  both)            test_disabled; echo; test_enabled ;;
+  autoassign-off)  test_autoassign_disabled ;;
+  autoassign-on)   test_autoassign_enabled ;;
   autoassign-noop) test_autoassign_no_optin ;;
-  all)            test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin ;;
-  *)              echo "Usage: $0 [disabled|enabled|both|autoassign-off|autoassign-on|autoassign-noop|all]"; exit 1 ;;
+  report-pass)     test_report_pass ;;
+  report-fail)     test_report_fail ;;
+  report)          test_report_pass; echo; test_report_fail ;;
+  all)             test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail ;;
+  *)               echo "Usage: $0 [disabled|enabled|both|autoassign-off|autoassign-on|autoassign-noop|report-pass|report-fail|report|all]"; exit 1 ;;
 esac
 
 echo ""
