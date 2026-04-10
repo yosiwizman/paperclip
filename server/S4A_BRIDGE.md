@@ -153,6 +153,45 @@ bash server/scripts/s4a-bridge-smoke.sh report-fail    # fail → BLOCKED
 bash server/scripts/s4a-bridge-smoke.sh report          # both
 ```
 
+## Reviewer-result reporting (Phase 12)
+
+Reviewer agents (Codex) report review results through the existing generic bridge. **No new env gate is needed** — `reportReview` is already a supported command when `S4A_ORCHESTRATOR_BRIDGE=1`.
+
+**Canonical `reportReview` envelope:**
+```json
+{
+  "version": "1",
+  "requestId": "req-review-001",
+  "command": "reportReview",
+  "payload": {
+    "workflowId": "slice-workflow-my-feature",
+    "approved": true
+  },
+  "caller": "codex",
+  "timestamp": "2026-04-09T12:00:00Z"
+}
+```
+
+**State transitions:**
+| Result | `approved` | Resulting state | Explanation |
+|--------|-----------|----------------|-------------|
+| Approve | `true` | `AWAITING_APPROVAL` | Review approved → Cedar allows → VERIFYING (auto) → AWAITING_APPROVAL |
+| Reject | `false` | `REVIEWING` | Review not approved → workflow stays in REVIEWING, awaiting new review |
+
+**Convenience helper:**
+```bash
+bash server/scripts/s4a-report-review.sh <workflowId> approve|reject [caller]
+```
+
+Default caller: `codex`. The helper POSTs the canonical envelope through the bridge.
+
+**Smoke proof:**
+```bash
+bash server/scripts/s4a-bridge-smoke.sh review-approve   # approve → AWAITING_APPROVAL
+bash server/scripts/s4a-bridge-smoke.sh review-reject     # reject → stays REVIEWING
+bash server/scripts/s4a-bridge-smoke.sh review             # both
+```
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.

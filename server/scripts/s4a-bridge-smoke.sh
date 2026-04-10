@@ -234,21 +234,84 @@ test_report_fail() {
   check_json "reportTests(fail)" "pass" "false" "$(echo "$r1" | jq -r '.data.pass')"
 }
 
+test_review_approve() {
+  echo "=== REPORT REVIEW — APPROVE PATH ==="
+  local slice_id="smoke-rev-approve-$(date +%s)"
+  local wf_id="slice-workflow-$slice_id"
+
+  # Create + assign + pass tests → reach REVIEWING
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Review approve test\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportTests "{\"workflowId\":\"$wf_id\",\"pass\":true,\"commit\":true}" opencode)" > /dev/null
+
+  # Verify in REVIEWING
+  local pre
+  pre=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope getState "{\"workflowId\":\"$wf_id\"}")")
+  check_json "pre-review state" "state" "REVIEWING" "$(echo "$pre" | jq -r '.data.state')"
+
+  # Report review APPROVE
+  local r1
+  r1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportReview "{\"workflowId\":\"$wf_id\",\"approved\":true}" codex)")
+  check_json "reportReview(approve)" "ok" "true" "$(echo "$r1" | jq -r '.ok')"
+  check_json "reportReview(approve)" "state" "AWAITING_APPROVAL" "$(echo "$r1" | jq -r '.data.state')"
+  check_json "reportReview(approve)" "approved" "true" "$(echo "$r1" | jq -r '.data.approved')"
+}
+
+test_review_reject() {
+  echo "=== REPORT REVIEW — REJECT PATH ==="
+  local slice_id="smoke-rev-reject-$(date +%s)"
+  local wf_id="slice-workflow-$slice_id"
+
+  # Create + assign + pass tests → reach REVIEWING
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Review reject test\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportTests "{\"workflowId\":\"$wf_id\",\"pass\":true,\"commit\":true}" opencode)" > /dev/null
+
+  # Verify in REVIEWING
+  local pre
+  pre=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope getState "{\"workflowId\":\"$wf_id\"}")")
+  check_json "pre-review state" "state" "REVIEWING" "$(echo "$pre" | jq -r '.data.state')"
+
+  # Report review REJECT
+  local r1
+  r1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportReview "{\"workflowId\":\"$wf_id\",\"approved\":false}" codex)")
+  check_json "reportReview(reject)" "ok" "true" "$(echo "$r1" | jq -r '.ok')"
+
+  # Reject: reviewApproved stays false, workflow stays in REVIEWING
+  local post_state
+  post_state=$(echo "$r1" | jq -r '.data.state')
+  check_json "reportReview(reject)" "state" "REVIEWING" "$post_state"
+  check_json "reportReview(reject)" "approved" "false" "$(echo "$r1" | jq -r '.data.approved')"
+}
+
 # --- Main ---
 MODE="${1:-both}"
 
 case "$MODE" in
-  disabled)        test_disabled ;;
-  enabled)         test_enabled ;;
-  both)            test_disabled; echo; test_enabled ;;
-  autoassign-off)  test_autoassign_disabled ;;
-  autoassign-on)   test_autoassign_enabled ;;
-  autoassign-noop) test_autoassign_no_optin ;;
-  report-pass)     test_report_pass ;;
-  report-fail)     test_report_fail ;;
-  report)          test_report_pass; echo; test_report_fail ;;
-  all)             test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail ;;
-  *)               echo "Usage: $0 [disabled|enabled|both|autoassign-off|autoassign-on|autoassign-noop|report-pass|report-fail|report|all]"; exit 1 ;;
+  disabled)         test_disabled ;;
+  enabled)          test_enabled ;;
+  both)             test_disabled; echo; test_enabled ;;
+  autoassign-off)   test_autoassign_disabled ;;
+  autoassign-on)    test_autoassign_enabled ;;
+  autoassign-noop)  test_autoassign_no_optin ;;
+  report-pass)      test_report_pass ;;
+  report-fail)      test_report_fail ;;
+  report)           test_report_pass; echo; test_report_fail ;;
+  review-approve)   test_review_approve ;;
+  review-reject)    test_review_reject ;;
+  review)           test_review_approve; echo; test_review_reject ;;
+  all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject ;;
+  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|report|review-approve|review-reject|review|all]"; exit 1 ;;
 esac
 
 echo ""
