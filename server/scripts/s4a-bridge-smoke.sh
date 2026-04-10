@@ -323,6 +323,46 @@ test_approve() {
   check_json "approve" "state" "APPROVED" "$(echo "$r1" | jq -r '.data.state')"
 }
 
+test_deploy() {
+  echo "=== DEPLOY PATH ==="
+  local slice_id="smoke-deploy-$(date +%s)"
+  local wf_id="slice-workflow-$slice_id"
+
+  # Full lifecycle to APPROVED
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Deploy test\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportTests "{\"workflowId\":\"$wf_id\",\"pass\":true,\"commit\":true}" opencode)" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportReview "{\"workflowId\":\"$wf_id\",\"approved\":true}" codex)" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope approve "{\"workflowId\":\"$wf_id\"}" ceo)" > /dev/null
+
+  # Verify in APPROVED
+  local pre
+  pre=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope getState "{\"workflowId\":\"$wf_id\"}")")
+  check_json "pre-deploy state" "state" "APPROVED" "$(echo "$pre" | jq -r '.data.state')"
+
+  # Deploy
+  local r1
+  r1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope deploy "{\"workflowId\":\"$wf_id\"}" ceo)")
+  check_json "deploy" "ok" "true" "$(echo "$r1" | jq -r '.ok')"
+
+  # Evidence check — deploy produces evidence packet
+  local evidence_dir
+  evidence_dir="$HOME/projects/s4a-slice-orchestrator/evidence/$slice_id"
+  if [ -d "$evidence_dir" ]; then
+    local has_deploy
+    has_deploy=$(ls "$evidence_dir" | grep -c "DEPLOYED" || true)
+    if [ "$has_deploy" -ge 1 ]; then ok "Deploy evidence packet exists"
+    else fail "No DEPLOYED evidence packet found"; fi
+  else fail "Evidence directory not found: $evidence_dir"; fi
+}
+
 # --- Main ---
 MODE="${1:-both}"
 
@@ -340,8 +380,9 @@ case "$MODE" in
   review-reject)    test_review_reject ;;
   review)           test_review_approve; echo; test_review_reject ;;
   approve)          test_approve ;;
-  all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject; echo; test_approve ;;
-  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|report|review-approve|review-reject|review|all]"; exit 1 ;;
+  deploy)           test_deploy ;;
+  all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject; echo; test_approve; echo; test_deploy ;;
+  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|all]"; exit 1 ;;
 esac
 
 echo ""

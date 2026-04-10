@@ -227,6 +227,43 @@ Default caller: `ceo`. The helper POSTs the canonical envelope through the bridg
 bash server/scripts/s4a-bridge-smoke.sh approve   # AWAITING_APPROVAL → APPROVED
 ```
 
+## Deploy (Phase 14)
+
+The CEO triggers deploy through the existing generic bridge. **No new env gate is needed** — `deploy` is already a supported command when `S4A_ORCHESTRATOR_BRIDGE=1`.
+
+**Canonical `deploy` envelope:**
+```json
+{
+  "version": "1",
+  "requestId": "req-deploy-001",
+  "command": "deploy",
+  "payload": {
+    "workflowId": "slice-workflow-my-feature"
+  },
+  "caller": "ceo",
+  "timestamp": "2026-04-09T12:00:00Z"
+}
+```
+
+**State transition:**
+| From state | To state | Mechanism |
+|-----------|----------|-----------|
+| `APPROVED` | `DEPLOYED` | Deploy signal → evidence packet emitted → workflow completes (terminal) |
+
+**Evidence:** Deploy emits an evidence packet with `fromState: "APPROVED"`, `toState: "DEPLOYED"`, persisted to `evidence/<sliceId>/`.
+
+**Convenience helper:**
+```bash
+bash server/scripts/s4a-deploy.sh <workflowId> [caller]
+```
+
+Default caller: `ceo`.
+
+**Smoke proof:**
+```bash
+bash server/scripts/s4a-bridge-smoke.sh deploy   # APPROVED → DEPLOYED + evidence check
+```
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.
