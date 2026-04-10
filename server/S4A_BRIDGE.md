@@ -474,12 +474,23 @@ A read-only inspector page inside Paperclip for viewing slice orchestrator state
 | DEPLOYED | (terminal) |
 | ROLLED_BACK | (terminal) |
 
+**Workflow listing (Phase 22):**
+- "Recent Workflows" panel auto-loads on page open via `listWorkflows` command
+- Shows workflowId, status (RUNNING/COMPLETED), start date for each workflow
+- Click a row to load its status + history + available actions
+- Up to 20 workflows shown, scrollable
+- Refresh button to reload the list
+- New workflows appear after Create
+
 **Files:**
-- `ui/src/pages/SliceInspector.tsx` — inspector page with mutation controls
-- `ui/src/api/s4a.ts` — API module: queries + mutations (createSlice, assignBuilder, retry, rollback, approve, deploy)
+- `ui/src/pages/SliceInspector.tsx` — inspector page with list + mutation controls
+- `ui/src/api/s4a.ts` — API module: queries (getStatus, getHistory, listWorkflows) + mutations
 - `ui/src/App.tsx` — route mount at `instance/settings/s4a-slices`
 
-**No new backend code** — uses existing `/api/s4a-orchestrator` POST route.
+**Orchestrator additions (Phase 22):**
+- `listWorkflows` command in adapter-core: queries Temporal `client.workflow.list()` for sliceWorkflow type
+- Returns `[{workflowId, status, startTime, closeTime}]`, max 50
+
 **No new env gate** — available whenever Paperclip runs (bridge must be enabled for data/actions).
 
 ## Branch / fork safety

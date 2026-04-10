@@ -4,8 +4,8 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../co
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { s4aApi, type SliceStatus, type TransitionRecord } from "../api/s4a";
-import { Search, Activity, AlertCircle, Plus, Play, RotateCcw, XCircle, CheckCircle, Rocket, RefreshCw } from "lucide-react";
+import { s4aApi, type SliceStatus, type TransitionRecord, type WorkflowListItem } from "../api/s4a";
+import { Search, Activity, AlertCircle, Plus, Play, RotateCcw, XCircle, CheckCircle, Rocket, RefreshCw, List } from "lucide-react";
 
 const STATE_COLORS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   DRAFT: "outline", SCOPED: "secondary", BUILDING: "default", REVIEWING: "default",
@@ -35,6 +35,18 @@ export function SliceInspector() {
   const [showCreate, setShowCreate] = useState(false);
   const [createDesc, setCreateDesc] = useState("");
   const [createId, setCreateId] = useState("");
+
+  // Workflow list
+  const [workflows, setWorkflows] = useState<WorkflowListItem[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+
+  const loadList = useCallback(async () => {
+    setListLoading(true);
+    try { setWorkflows(await s4aApi.listWorkflows(20)); } catch { /* bridge may be off */ }
+    setListLoading(false);
+  }, []);
+
+  useEffect(() => { loadList(); }, [loadList]);
 
   const refresh = useCallback(async (wfId: string) => {
     try {
@@ -81,6 +93,7 @@ export function SliceInspector() {
       setActionMsg(`Created: ${r.workflowId} → ${r.state}`);
       setShowCreate(false); setCreateDesc(""); setCreateId("");
       await refresh(r.workflowId);
+      loadList();
     } catch (e) {
       setError(`Create failed: ${(e as Error).message}`);
     } finally {
@@ -134,6 +147,36 @@ export function SliceInspector() {
           <Search className="h-4 w-4 mr-1" /> {loading ? "Loading..." : "Inspect"}
         </Button>
       </div>
+
+      {/* Workflow list */}
+      {workflows.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <List className="h-4 w-4" /> Recent Workflows
+              </CardTitle>
+              <Button variant="ghost" size="sm" onClick={loadList} disabled={listLoading}>
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {workflows.map((wf) => (
+                <button key={wf.workflowId} onClick={() => { setWorkflowId(wf.workflowId); setStatus(null); setHistory([]); setActionMsg(null); setError(null); refresh(wf.workflowId); }}
+                  className={`w-full text-left px-3 py-2 rounded text-sm hover:bg-accent flex items-center justify-between gap-2 ${workflowId === wf.workflowId ? 'bg-accent' : ''}`}>
+                  <span className="font-mono text-xs truncate">{wf.workflowId}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant={wf.status === 'RUNNING' ? 'default' : 'outline'} className="text-xs">{wf.status}</Badge>
+                    {wf.startTime && <span className="text-xs text-muted-foreground">{new Date(wf.startTime).toLocaleDateString()}</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Messages */}
       {actionMsg && (

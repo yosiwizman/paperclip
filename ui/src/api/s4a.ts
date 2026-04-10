@@ -64,8 +64,21 @@ export interface ActionResult {
   error?: string;
 }
 
+export interface WorkflowListItem {
+  workflowId: string;
+  status: string;
+  startTime: string | null;
+  closeTime: string | null;
+}
+
 export const s4aApi = {
   // --- Queries ---
+  async listWorkflows(limit = 20): Promise<WorkflowListItem[]> {
+    const r = await bridgePost("listWorkflows", { limit });
+    if (!r.ok) throw new Error(r.error ?? "listWorkflows failed");
+    return (r.data as unknown as { workflows: WorkflowListItem[] }).workflows;
+  },
+
   async getStatus(workflowId: string): Promise<SliceStatus & { workflowId: string }> {
     const r = await bridgePost("getStatus", { workflowId });
     if (!r.ok) throw new Error(r.error ?? "getStatus failed");
