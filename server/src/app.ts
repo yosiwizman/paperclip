@@ -169,7 +169,7 @@ export async function createApp(
   api.use(sidebarBadgeRoutes(db));
   api.use(instanceSettingsRoutes(db));
 
-  // S4A Slice Orchestrator bridge — opt-in via S4A_ORCHESTRATOR_BRIDGE=1
+  // S4A Slice Orchestrator bridge — enabled by default, disable with S4A_ORCHESTRATOR_BRIDGE=0
   if (isOrchestratorBridgeEnabled()) {
     api.use("/s4a-orchestrator", s4aOrchestratorRoutes());
     logger.info("S4A Orchestrator bridge enabled on /api/s4a-orchestrator");

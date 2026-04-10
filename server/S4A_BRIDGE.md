@@ -9,18 +9,18 @@ Opt-in integration between Paperclip and the S4A slice orchestrator.
 | Branch | `s4a-orchestrator-bridge` (local + fork) |
 | Fork | `yosiwizman/paperclip` (protection remote only) |
 | Upstream | `paperclipai/paperclip` — **NOT modified** |
-| Default behavior | **Unchanged** — bridge disabled unless env-gated on |
+| Default behavior | **Bridge enabled by default** (Phase 24) |
 
 ## Enable / Disable
 
 | Env var | Value | Behavior |
 |---------|-------|----------|
-| `S4A_ORCHESTRATOR_BRIDGE` | unset (default) | Bridge not mounted. 404 on `/api/s4a-orchestrator`. Zero behavior change. |
-| `S4A_ORCHESTRATOR_BRIDGE` | `1` | Bridge mounted. POST `/api/s4a-orchestrator` processes envelope requests. |
+| `S4A_ORCHESTRATOR_BRIDGE` | unset (default) | **Bridge enabled.** POST `/api/s4a-orchestrator` processes requests. |
+| `S4A_ORCHESTRATOR_BRIDGE` | `0` | Bridge disabled. 404 on `/api/s4a-orchestrator`. |
 
-**Enable:** `S4A_ORCHESTRATOR_BRIDGE=1 pnpm dev`
+**Disable:** `S4A_ORCHESTRATOR_BRIDGE=0 pnpm dev`
 
-**Disable:** Normal `pnpm dev` (no env var)
+**Enable:** Normal `pnpm dev` (bridge is on by default)
 
 ## Files
 

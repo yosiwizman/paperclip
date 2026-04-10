@@ -1,7 +1,7 @@
 /**
  * S4A Slice Orchestrator bridge route — thin POST handler.
  *
- * Gated behind S4A_ORCHESTRATOR_BRIDGE=1 env var.
+ * Enabled by default. Set S4A_ORCHESTRATOR_BRIDGE=0 to disable.
  * All subprocess + config logic lives in services/s4a-orchestrator-bridge.ts.
  *
  * See: s4a-slice-orchestrator/docs/ENVELOPE_CONTRACT.md

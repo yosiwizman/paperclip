@@ -5,7 +5,7 @@
  * The route layer (routes/s4a-orchestrator.ts) delegates to this service.
  *
  * Env vars:
- *   S4A_ORCHESTRATOR_BRIDGE   — "1" to enable, anything else to disable (default: disabled)
+ *   S4A_ORCHESTRATOR_BRIDGE   — enabled by default; set to "0" to disable
  *   S4A_WRAPPER_PATH          — path to orchestrator wrapper.js (default: ~/projects/s4a-slice-orchestrator/dist/wrapper.js)
  *   S4A_BRIDGE_TIMEOUT_MS     — subprocess timeout in ms (default: 45000)
  *   S4A_BRIDGE_AUTO_ASSIGN    — "1" to enable auto-assign after createSlice (default: disabled)
@@ -47,7 +47,7 @@ export function resolveBridgeConfig(): BridgeConfig {
   );
 
   return {
-    enabled: process.env.S4A_ORCHESTRATOR_BRIDGE === "1",
+    enabled: process.env.S4A_ORCHESTRATOR_BRIDGE !== "0",
     autoAssignEnabled: process.env.S4A_BRIDGE_AUTO_ASSIGN === "1",
     defaultBuilder: process.env.S4A_DEFAULT_BUILDER ?? "opencode",
     wrapperPath: process.env.S4A_WRAPPER_PATH ?? defaultWrapperPath,
