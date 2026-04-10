@@ -291,6 +291,50 @@ bash server/scripts/s4a-happy-path.sh "Fix bug #42" my-bugfix
 bash server/scripts/s4a-bridge-smoke.sh happy-path
 ```
 
+## Failure-path recovery: retry (Phase 16)
+
+After a failed `reportTests(pass:false)` moves the slice to `BLOCKED`, the `retry` command recovers it. **No new env gate needed** — `retry` is already a supported command when `S4A_ORCHESTRATOR_BRIDGE=1`. **No new orchestrator code was needed** — the retry signal and BLOCKED→SCOPED transition were implemented in Phase 6D.
+
+**Recovery flow:**
+```
+BUILDING → reportTests(fail) → BLOCKED → retry → SCOPED → assignBuilder → BUILDING (re-try)
+```
+
+**Canonical `retry` envelope:**
+```json
+{
+  "version": "1",
+  "requestId": "req-retry-001",
+  "command": "retry",
+  "payload": {
+    "workflowId": "slice-workflow-my-feature"
+  },
+  "caller": "ceo",
+  "timestamp": "2026-04-09T12:00:00Z"
+}
+```
+
+**State transition:**
+| From state | To state | Effect |
+|-----------|----------|--------|
+| `BLOCKED` | `SCOPED` | retryCount reset to 0, builder cleared, tests cleared. Slice can be re-assigned. |
+
+**Post-recovery:** After retry, the slice is back in SCOPED — a new `assignBuilder` can be issued, and the build/test/review cycle restarts.
+
+**Convenience helper:**
+```bash
+bash server/scripts/s4a-retry.sh <workflowId> [caller]
+```
+
+Default caller: `ceo`.
+
+**Smoke proof:**
+```bash
+bash server/scripts/s4a-bridge-smoke.sh retry   # fail → BLOCKED → retry → SCOPED → reassign
+```
+
+**Alternative recovery:** `rollback` (BLOCKED → ROLLED_BACK, terminal). Use when the slice should be abandoned rather than retried.
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.

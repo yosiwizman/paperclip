@@ -363,6 +363,37 @@ test_deploy() {
   else fail "Evidence directory not found: $evidence_dir"; fi
 }
 
+test_retry() {
+  echo "=== FAIL → BLOCKED → RETRY → SCOPED → REASSIGN ==="
+  local slice_id="smoke-retry-$(date +%s)"
+  local wf_id="slice-workflow-$slice_id"
+
+  # 1. Create + assign
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Retry test\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")" > /dev/null
+
+  # 2. Report tests FAIL → BLOCKED
+  local r_fail
+  r_fail=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportTests "{\"workflowId\":\"$wf_id\",\"pass\":false,\"commit\":true}" opencode)")
+  check_json "reportTests(fail)" "state" "BLOCKED" "$(echo "$r_fail" | jq -r '.data.state')"
+
+  # 3. Retry → SCOPED
+  local r_retry
+  r_retry=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope retry "{\"workflowId\":\"$wf_id\"}" ceo)")
+  check_json "retry" "ok" "true" "$(echo "$r_retry" | jq -r '.ok')"
+  check_json "retry" "state" "SCOPED" "$(echo "$r_retry" | jq -r '.data.state')"
+
+  # 4. Post-recovery: re-assign succeeds
+  local r_reassign
+  r_reassign=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"claude-code\"}")")
+  check_json "reassign after retry" "state" "BUILDING" "$(echo "$r_reassign" | jq -r '.data.state')"
+}
+
 # --- Main ---
 MODE="${1:-both}"
 
@@ -381,9 +412,10 @@ case "$MODE" in
   review)           test_review_approve; echo; test_review_reject ;;
   approve)          test_approve ;;
   deploy)           test_deploy ;;
+  retry)            test_retry ;;
   happy-path)       SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; bash "$SCRIPT_DIR/s4a-happy-path.sh" "Smoke happy-path proof" ;;
-  all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject; echo; test_approve; echo; test_deploy ;;
-  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|happy-path|all]"; exit 1 ;;
+  all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject; echo; test_approve; echo; test_deploy; echo; test_retry ;;
+  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|retry|happy-path|all]"; exit 1 ;;
 esac
 
 echo ""
