@@ -381,8 +381,9 @@ case "$MODE" in
   review)           test_review_approve; echo; test_review_reject ;;
   approve)          test_approve ;;
   deploy)           test_deploy ;;
+  happy-path)       SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; bash "$SCRIPT_DIR/s4a-happy-path.sh" "Smoke happy-path proof" ;;
   all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject; echo; test_approve; echo; test_deploy ;;
-  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|all]"; exit 1 ;;
+  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|happy-path|all]"; exit 1 ;;
 esac
 
 echo ""

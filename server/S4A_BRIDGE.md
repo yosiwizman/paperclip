@@ -264,6 +264,33 @@ Default caller: `ceo`.
 bash server/scripts/s4a-bridge-smoke.sh deploy   # APPROVED → DEPLOYED + evidence check
 ```
 
+## End-to-end happy path (Phase 15)
+
+One script runs the complete slice lifecycle through the bridge:
+
+```bash
+bash server/scripts/s4a-happy-path.sh "Build login page"
+bash server/scripts/s4a-happy-path.sh "Fix bug #42" my-bugfix
+```
+
+**No new env gate needed** — uses `S4A_ORCHESTRATOR_BRIDGE=1` only.
+
+**Lifecycle stages executed:**
+1. `createSlice` → SCOPED
+2. `assignBuilder` (opencode) → BUILDING
+3. `reportTests` (pass) → REVIEWING
+4. `reportReview` (approve) → AWAITING_APPROVAL
+5. `approve` → APPROVED
+6. `deploy` → DEPLOYED (terminal)
+7. Evidence check: verifies DEPLOYED evidence packet exists
+
+**Output:** sliceId, workflowId, stage-by-stage PASS/FAIL, evidence summary.
+
+**Smoke proof:**
+```bash
+bash server/scripts/s4a-bridge-smoke.sh happy-path
+```
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.
