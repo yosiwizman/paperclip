@@ -335,6 +335,36 @@ bash server/scripts/s4a-bridge-smoke.sh retry   # fail → BLOCKED → retry →
 
 **Alternative recovery:** `rollback` (BLOCKED → ROLLED_BACK, terminal). Use when the slice should be abandoned rather than retried.
 
+## Escalation: OpenCode → Claude Code (Phase 17)
+
+When OpenCode fails and the slice enters BLOCKED, the CEO can escalate to Claude Code using the explicit escalation helper. **This is a manual escalation action, not automatic policy enforcement** — the current orchestrator does not track cross-retry attempt counts, so the "2 tries then Claude" policy (DEC-003) must be enforced by the caller.
+
+**Escalation flow:**
+```
+BUILDING(opencode) → reportTests(fail) → BLOCKED → escalate → retry → SCOPED → assignBuilder(claude-code) → BUILDING(claude-code)
+```
+
+**Convenience helper:**
+```bash
+bash server/scripts/s4a-escalate.sh <workflowId> [caller]
+```
+
+Default caller: `ceo`. The helper:
+1. Checks the slice is in BLOCKED
+2. Issues `retry` → SCOPED
+3. Issues `assignBuilder` with `agentId: claude-code` → BUILDING
+4. Verifies the result
+
+**No new env gate needed** — uses existing bridge commands.
+**No new orchestrator code** — uses existing `retry` + `assignBuilder`.
+
+**Policy note:** Automatic "2 tries then Claude" enforcement would require the orchestrator to track attempt history across retries. This is deferred. The explicit helper is the correct primitive until that tracking is added.
+
+**Smoke proof:**
+```bash
+bash server/scripts/s4a-bridge-smoke.sh escalate   # opencode fail → BLOCKED → escalate → claude-code BUILDING
+```
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.

@@ -394,6 +394,60 @@ test_retry() {
   check_json "reassign after retry" "state" "BUILDING" "$(echo "$r_reassign" | jq -r '.data.state')"
 }
 
+test_escalate() {
+  echo "=== ESCALATION: OpenCode FAIL → BLOCKED → escalate → Claude Code BUILDING ==="
+  local slice_id="smoke-escalate-$(date +%s)"
+  local wf_id="slice-workflow-$slice_id"
+
+  # 1. Create + assign to opencode
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Escalation test\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")" > /dev/null
+
+  # 2. OpenCode reports tests FAIL → BLOCKED
+  local r_fail
+  r_fail=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportTests "{\"workflowId\":\"$wf_id\",\"pass\":false,\"commit\":true}" opencode)")
+  check_json "opencode fail" "state" "BLOCKED" "$(echo "$r_fail" | jq -r '.data.state')"
+
+  # 3. Escalate: BLOCKED → retry → SCOPED → assign claude-code → BUILDING
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  local esc_out
+  esc_out=$(bash "$SCRIPT_DIR/s4a-escalate.sh" "$wf_id" ceo 2>&1)
+  local esc_exit=$?
+
+  if [ $esc_exit -eq 0 ]; then
+    ok "Escalation script succeeded"
+  else
+    fail "Escalation script failed (exit $esc_exit)"
+    echo "$esc_out"
+    return
+  fi
+
+  # 4. Verify post-escalation state
+  local post
+  post=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope getState "{\"workflowId\":\"$wf_id\"}")")
+  check_json "post-escalation" "state" "BUILDING" "$(echo "$post" | jq -r '.data.state')"
+
+  # 5. Verify builder is claude-code via evidence (check last assignBuilder evidence packet)
+  local evidence_dir="$HOME/projects/s4a-slice-orchestrator/evidence/$slice_id"
+  if [ -d "$evidence_dir" ]; then
+    local last_assign
+    last_assign=$(ls "$evidence_dir" | grep "SCOPED_BUILDING" | tail -1)
+    if [ -n "$last_assign" ]; then
+      local actor
+      actor=$(jq -r '.actor' "$evidence_dir/$last_assign")
+      check_json "builder identity" "actor" "claude-code" "$actor"
+    else
+      fail "No SCOPED_BUILDING evidence found"
+    fi
+  else
+    fail "Evidence dir not found: $evidence_dir"
+  fi
+}
+
 # --- Main ---
 MODE="${1:-both}"
 
@@ -413,9 +467,10 @@ case "$MODE" in
   approve)          test_approve ;;
   deploy)           test_deploy ;;
   retry)            test_retry ;;
+  escalate)         SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; test_escalate ;;
   happy-path)       SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; bash "$SCRIPT_DIR/s4a-happy-path.sh" "Smoke happy-path proof" ;;
   all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject; echo; test_approve; echo; test_deploy; echo; test_retry ;;
-  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|retry|happy-path|all]"; exit 1 ;;
+  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|retry|escalate|happy-path|all]"; exit 1 ;;
 esac
 
 echo ""
