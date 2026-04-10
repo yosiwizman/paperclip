@@ -506,6 +506,19 @@ The system supports multiple concurrent slice workflows with full isolation. **N
 
 **UI support:** the Recent Workflows panel shows all concurrent workflows. Click to switch between them — each loads its own isolated status/history/actions.
 
+## Auto-refresh polling (Phase 25)
+
+The Slice Inspector polls for live updates automatically:
+
+| Target | Interval | Pauses when |
+|--------|----------|-------------|
+| Selected workflow status + history | 5 seconds | Mutation in flight, or terminal state (DEPLOYED/ROLLED_BACK) |
+| Workflow list | 15 seconds | Mutation in flight |
+
+**UI indicator:** "Auto-refresh · HH:MM:SS" shown below the workflowId when active. Hidden for terminal states.
+
+**No backend changes** — uses existing `getStatus`, `getHistory`, `listWorkflows` queries.
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.

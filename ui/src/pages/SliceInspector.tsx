@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -47,6 +47,33 @@ export function SliceInspector() {
   }, []);
 
   useEffect(() => { loadList(); }, [loadList]);
+
+  // Auto-refresh polling
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const TERMINAL = new Set(["DEPLOYED", "ROLLED_BACK"]);
+  const actingRef = useRef(acting);
+  actingRef.current = acting;
+
+  // Poll selected workflow status every 5s (skip if acting or terminal)
+  useEffect(() => {
+    const wfId = workflowId.trim();
+    if (!wfId || !status) return;
+    if (TERMINAL.has(status.state)) return;
+    const timer = setInterval(async () => {
+      if (actingRef.current) return;
+      try {
+        const [s, h] = await Promise.all([s4aApi.getStatus(wfId), s4aApi.getHistory(wfId)]);
+        setStatus(s); setHistory(h); setLastRefresh(new Date());
+      } catch { /* ignore poll errors silently */ }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [workflowId, status?.state]);
+
+  // Poll workflow list every 15s
+  useEffect(() => {
+    const timer = setInterval(() => { if (!actingRef.current) loadList(); }, 15000);
+    return () => clearInterval(timer);
+  }, [loadList]);
 
   const refresh = useCallback(async (wfId: string) => {
     try {
@@ -204,7 +231,12 @@ export function SliceInspector() {
                 <RefreshCw className="h-4 w-4" />
               </Button>
             </div>
-            <CardDescription className="font-mono text-xs">{status.workflowId}</CardDescription>
+            <CardDescription className="font-mono text-xs flex items-center justify-between">
+              <span>{status.workflowId}</span>
+              {lastRefresh && !TERMINAL.has(st) && (
+                <span className="text-xs text-muted-foreground ml-2">Auto-refresh · {lastRefresh.toLocaleTimeString()}</span>
+              )}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4 mb-4">
