@@ -493,6 +493,19 @@ A read-only inspector page inside Paperclip for viewing slice orchestrator state
 
 **No new env gate** — available whenever Paperclip runs (bridge must be enabled for data/actions).
 
+## Multi-slice concurrency (Phase 23)
+
+The system supports multiple concurrent slice workflows with full isolation. **No code changes were needed** — Temporal handles each workflow independently, evidence files are namespaced by sliceId.
+
+**Proven isolation guarantees:**
+- State: each workflow maintains independent state (one REVIEWING, another BLOCKED simultaneously)
+- Builder: each workflow tracks its own builder identity
+- History: transition records are workflow-scoped, no cross-contamination
+- Evidence: files stored in separate `evidence/<sliceId>/` directories
+- Mutations: actions on one workflow do not affect another (retry on B doesn't change A's state)
+
+**UI support:** the Recent Workflows panel shows all concurrent workflows. Click to switch between them — each loads its own isolated status/history/actions.
+
 ## Branch / fork safety
 
 - Bridge work lives on the `s4a-orchestrator-bridge` branch, NOT on `master`.
