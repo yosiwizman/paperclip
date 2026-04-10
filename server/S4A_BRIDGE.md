@@ -358,11 +358,42 @@ Default caller: `ceo`. The helper:
 **No new env gate needed** — uses existing bridge commands.
 **No new orchestrator code** — uses existing `retry` + `assignBuilder`.
 
-**Policy note:** Automatic "2 tries then Claude" enforcement would require the orchestrator to track attempt history across retries. This is deferred. The explicit helper is the correct primitive until that tracking is added.
+**Note:** The explicit escalation helper (Phase 17) remains available for manual use. The policy-aware helper (Phase 18, below) supersedes it for automated routing.
 
 **Smoke proof:**
 ```bash
 bash server/scripts/s4a-bridge-smoke.sh escalate   # opencode fail → BLOCKED → escalate → claude-code BUILDING
+```
+
+## Policy-aware builder routing (Phase 18)
+
+The orchestrator now tracks `buildFailCount` — a durable counter that increments on every BUILDING→BLOCKED transition and does NOT reset on retry. A new `getStatus` query exposes this counter plus builder identity.
+
+**Policy:** OpenCode for the first 2 failures, then Claude Code (per DEC-003, DELIVERY_PIPELINE.md).
+
+**New orchestrator query: `getStatus`**
+```json
+{
+  "command": "getStatus",
+  "payload": { "workflowId": "slice-workflow-xyz" }
+}
+→ { "state": "BLOCKED", "builderAgentId": "opencode", "buildFailCount": 1 }
+```
+
+**Policy-aware helper:**
+```bash
+bash server/scripts/s4a-policy-route.sh <workflowId> [caller]
+```
+
+The helper:
+1. Queries `getStatus` for `buildFailCount`
+2. If `buildFailCount < 2` → retry + assign `opencode`
+3. If `buildFailCount >= 2` → retry + assign `claude-code`
+4. Outputs machine-friendly JSON result
+
+**Smoke proof:**
+```bash
+bash server/scripts/s4a-bridge-smoke.sh policy-route   # 1st fail→opencode, 2nd fail→claude-code
 ```
 
 ## Branch / fork safety

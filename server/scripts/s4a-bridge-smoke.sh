@@ -448,6 +448,53 @@ test_escalate() {
   fi
 }
 
+test_policy_route() {
+  echo "=== POLICY ROUTING: 2-fail escalation ==="
+  local slice_id="smoke-policy-$(date +%s)"
+  local wf_id="slice-workflow-$slice_id"
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+  # 1. Create + assign opencode
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope createSlice "{\"sliceId\":\"$slice_id\",\"description\":\"Policy routing test\"}")" > /dev/null
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope assignBuilder "{\"workflowId\":\"$wf_id\",\"agentId\":\"opencode\"}")" > /dev/null
+
+  # 2. First fail → BLOCKED (buildFailCount=1)
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportTests "{\"workflowId\":\"$wf_id\",\"pass\":false,\"commit\":true}" opencode)" > /dev/null
+
+  local s1
+  s1=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope getStatus "{\"workflowId\":\"$wf_id\"}")" | jq -r '.data.buildFailCount')
+  check_json "first fail" "buildFailCount" "1" "$s1"
+
+  # 3. Policy route after first fail → should choose opencode (< 2)
+  echo "--- policy-route after 1st fail ---"
+  local pr1
+  pr1=$(bash "$SCRIPT_DIR/s4a-policy-route.sh" "$wf_id" ceo 2>&1)
+  local builder1
+  builder1=$(echo "$pr1" | tail -1 | jq -r '.builder' 2>/dev/null || echo "parse-error")
+  check_json "policy 1st fail" "builder" "opencode" "$builder1"
+
+  # 4. Second fail → BLOCKED (buildFailCount=2)
+  curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope reportTests "{\"workflowId\":\"$wf_id\",\"pass\":false,\"commit\":true}" opencode)" > /dev/null
+
+  local s2
+  s2=$(curl -s -X POST "$BRIDGE_URL" -H 'Content-Type: application/json' \
+    -d "$(envelope getStatus "{\"workflowId\":\"$wf_id\"}")" | jq -r '.data.buildFailCount')
+  check_json "second fail" "buildFailCount" "2" "$s2"
+
+  # 5. Policy route after second fail → should choose claude-code (>= 2)
+  echo "--- policy-route after 2nd fail ---"
+  local pr2
+  pr2=$(bash "$SCRIPT_DIR/s4a-policy-route.sh" "$wf_id" ceo 2>&1)
+  local builder2
+  builder2=$(echo "$pr2" | tail -1 | jq -r '.builder' 2>/dev/null || echo "parse-error")
+  check_json "policy 2nd fail" "builder" "claude-code" "$builder2"
+}
+
 # --- Main ---
 MODE="${1:-both}"
 
@@ -468,9 +515,10 @@ case "$MODE" in
   deploy)           test_deploy ;;
   retry)            test_retry ;;
   escalate)         SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; test_escalate ;;
+  policy-route)     test_policy_route ;;
   happy-path)       SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; bash "$SCRIPT_DIR/s4a-happy-path.sh" "Smoke happy-path proof" ;;
   all)              test_disabled; echo; test_enabled; echo; test_autoassign_disabled; echo; test_autoassign_enabled; echo; test_autoassign_no_optin; echo; test_report_pass; echo; test_report_fail; echo; test_review_approve; echo; test_review_reject; echo; test_approve; echo; test_deploy; echo; test_retry ;;
-  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|retry|escalate|happy-path|all]"; exit 1 ;;
+  *)                echo "Usage: $0 [disabled|enabled|both|autoassign-*|report-*|review-*|approve|deploy|retry|escalate|policy-route|happy-path|all]"; exit 1 ;;
 esac
 
 echo ""
