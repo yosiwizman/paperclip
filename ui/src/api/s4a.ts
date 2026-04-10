@@ -55,12 +55,12 @@ export const s4aApi = {
   async getStatus(workflowId: string): Promise<SliceStatus & { workflowId: string }> {
     const r = await bridgePost("getStatus", { workflowId });
     if (!r.ok) throw new Error(r.error ?? "getStatus failed");
-    return r.data as SliceStatus & { workflowId: string };
+    return r.data as unknown as SliceStatus & { workflowId: string };
   },
 
   async getHistory(workflowId: string): Promise<TransitionRecord[]> {
     const r = await bridgePost("getHistory", { workflowId });
     if (!r.ok) throw new Error(r.error ?? "getHistory failed");
-    return (r.data as { history: TransitionRecord[] }).history;
+    return (r.data as unknown as { history: TransitionRecord[] }).history;
   },
 };

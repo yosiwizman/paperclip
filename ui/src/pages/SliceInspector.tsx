@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -24,7 +24,9 @@ const STATE_COLORS: Record<string, "default" | "secondary" | "destructive" | "ou
 
 export function SliceInspector() {
   const { setBreadcrumbs } = useBreadcrumbs();
-  setBreadcrumbs([{ label: "S4A Slice Inspector" }]);
+  useEffect(() => {
+    setBreadcrumbs([{ label: "S4A Slice Inspector" }]);
+  }, [setBreadcrumbs]);
 
   const [workflowId, setWorkflowId] = useState("");
   const [status, setStatus] = useState<(SliceStatus & { workflowId: string }) | null>(null);
